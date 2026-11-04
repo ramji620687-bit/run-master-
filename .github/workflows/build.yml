@@ -1,0 +1,78 @@
+name: Build APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Organize flat files into folders
+        run: |
+          python3 - <<'PY'
+          import os, shutil
+          B = "app/src/main/java/com/runmaster/app/"
+          R = "app/src/main/res/"
+          M = {
+            "AndroidManifest.xml": "app/src/main/AndroidManifest.xml",
+            "proguard-rules.pro": "app/proguard-rules.pro",
+            "gradle-wrapper.properties": "gradle/wrapper/gradle-wrapper.properties",
+            "MainActivity.kt": B,
+            "RunMasterApplication.kt": B,
+            "AppDatabase.kt": B + "data/db/",
+            "Prefs.kt": B + "data/prefs/",
+            "Format.kt": B + "util/",
+            "LapDetectionEngine.kt": B + "domain/",
+            "VoiceAnnouncementManager.kt": B + "domain/",
+            "LocationTrackingService.kt": B + "service/",
+            "TrackingState.kt": B + "service/",
+            "Theme.kt": B + "ui/theme/",
+            "RunMasterNavigation.kt": B + "ui/navigation/",
+            "Components.kt": B + "ui/screens/",
+            "GroundCalibrationScreen.kt": B + "ui/screens/",
+            "HistoryScreens.kt": B + "ui/screens/",
+            "HomeScreen.kt": B + "ui/screens/",
+            "LiveRunningScreen.kt": B + "ui/screens/",
+            "colors.xml": R + "values/",
+            "strings.xml": R + "values/",
+            "styles.xml": R + "values/",
+            "ic_launcher_foreground.xml": R + "drawable/",
+            "ic_notification.xml": R + "drawable/",
+            "ic_launcher.xml": R + "mipmap-anydpi-v26/",
+            "ic_launcher_round.xml": R + "mipmap-anydpi-v26/",
+          }
+          for name, dest in M.items():
+              if os.path.isfile(name):
+                  if dest.endswith("/"):
+                      dest = dest + name
+                  os.makedirs(os.path.dirname(dest), exist_ok=True)
+                  shutil.move(name, dest)
+          gradle = [f for f in os.listdir(".") if f.startswith("build.gradle") and f.endswith(".kts")]
+          app_file = None
+          root_file = None
+          for f in gradle:
+              if "namespace" in open(f, encoding="utf-8").read():
+                  app_file = f
+              else:
+                  root_file = f
+          if app_file:
+              os.makedirs("app", exist_ok=True)
+              shutil.move(app_file, "app/build.gradle.kts")
+          if root_file and root_file != "build.gradle.kts":
+              shutil.move(root_file, "build.gradle.kts")
+          PY
+          find . -type f -not -path "./.git/*" | sort
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+      - run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: run-master-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
