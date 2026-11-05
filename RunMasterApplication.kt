@@ -1,111 +1,37 @@
-package com.runmaster.app.ui.navigation
+package com.runmaster.app
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DirectionsRun
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Insights
-import androidx.compose.material.icons.filled.SportsScore
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import com.runmaster.app.service.RunStatus
-import com.runmaster.app.service.TrackingState
-import com.runmaster.app.ui.screens.AnalyticsScreen
-import com.runmaster.app.ui.screens.GroundCalibrationScreen
-import com.runmaster.app.ui.screens.HomeScreen
-import com.runmaster.app.ui.screens.LiveRunningScreen
-import com.runmaster.app.ui.screens.WorkoutHistoryScreen
-import com.runmaster.app.ui.theme.NeonLime
-import com.runmaster.app.ui.theme.SurfaceDark
+import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
+import org.osmdroid.config.Configuration
+import java.io.File
 
-@Composable
-private fun RowScope.NavItem(
-    selected: Boolean,
-    label: String,
-    icon: ImageVector,
-    onClick: () -> Unit
-) {
-    NavigationBarItem(
-        selected = selected,
-        onClick = onClick,
-        icon = { Icon(icon, contentDescription = label) },
-        label = { Text(label) },
-        colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = Color.Black,
-            selectedTextColor = NeonLime,
-            indicatorColor = NeonLime
-        )
-    )
-}
-
-@Composable
-fun RunMasterNavigation() {
-    val run by TrackingState.state.collectAsState()
-    var screen by rememberSaveable {
-        mutableStateOf(if (TrackingState.state.value.status != RunStatus.IDLE) "live_run" else "home")
+class RunMasterApplication : Application() {
+    companion object {
+        const val TRACKING_CHANNEL_ID = "run_master_tracking_channel"
     }
 
-    BackHandler(enabled = screen == "live_run") { screen = "home" }
+    override fun onCreate() {
+        super.onCreate()
+        Configuration.getInstance().apply {
+            load(this@RunMasterApplication, getSharedPreferences("osmdroid", Context.MODE_PRIVATE))
+            userAgentValue = packageName
+            osmdroidBasePath = File(cacheDir, "osmdroid")
+            osmdroidTileCache = File(cacheDir, "osmdroid/tiles")
+        }
+        createNotificationChannel()
+    }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            NavigationBar(containerColor = SurfaceDark) {
-                NavItem(
-                    selected = screen == "home" || screen == "live_run",
-                    label = "Run",
-                    icon = Icons.Default.DirectionsRun,
-                    onClick = { screen = if (run.status != RunStatus.IDLE) "live_run" else "home" }
-                )
-                NavItem(
-                    selected = screen == "ground",
-                    label = "Ground",
-                    icon = Icons.Default.SportsScore,
-                    onClick = { screen = "ground" }
-                )
-                NavItem(
-                    selected = screen == "history",
-                    label = "History",
-                    icon = Icons.Default.History,
-                    onClick = { screen = "history" }
-                )
-                NavItem(
-                    selected = screen == "analytics",
-                    label = "Stats",
-                    icon = Icons.Default.Insights,
-                    onClick = { screen = "analytics" }
-                )
-            }
+    private fun createNotificationChannel() {
+        val channel = NotificationChannel(
+            TRACKING_CHANNEL_ID,
+            "Run Master Active Workout",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "Shows live distance, time and laps while a workout is active"
+            setShowBadge(false)
         }
-    ) { padding ->
-        Surface(modifier = Modifier.padding(padding), color = MaterialTheme.colorScheme.background) {
-            when (screen) {
-                "home" -> HomeScreen(onOpenLive = { screen = "live_run" })
-                "live_run" -> LiveRunningScreen(
-                    onFinished = { screen = "history" },
-                    onBack = { screen = "home" }
-                )
-                "ground" -> GroundCalibrationScreen()
-                "history" -> WorkoutHistoryScreen()
-                "analytics" -> AnalyticsScreen()
-            }
-        }
+        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 }
